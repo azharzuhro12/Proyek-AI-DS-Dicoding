@@ -1,174 +1,104 @@
-# Otomatisasi Pipeline AI (MLOps): Deteksi Keluhan Pelanggan Produk Teknologi
+# Pipeline MLOps Analisis Sentimen dengan TFX, Docker, Prometheus & Grafana
 
-![Python](https://img.shields.io/badge/Python-3.8-3776AB?logo=python&logoColor=white)
-![TFX](https://img.shields.io/badge/TFX-TensorFlow_Extended-FF6F00?logo=tensorflow&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-TF_Serving-2496ED?logo=docker&logoColor=white)
-![Prometheus](https://img.shields.io/badge/Prometheus-Monitoring-E6522C?logo=prometheus&logoColor=white)
-![Grafana](https://img.shields.io/badge/Grafana-Observability-F46800?logo=grafana&logoColor=white)
-
-## Tentang Apa Proyek Ini?
-
-Membuat model kecerdasan buatan (AI) yang pintar membaca keluhan pelanggan saja belum cukup jika model tersebut hanya berjalan di laptop pembuatnya. Agar bisa dipakai oleh perusahaan setiap hari, model AI membutuhkan **"jalur pabrik otomatis" (disebut MLOps)**.
-
-Proyek ini membangun sistem otomatis dari hulu ke hilir yang bertugas:
-1. **Membaca ribuan cuitan (tweet) pelanggan** tentang produk teknologi (seperti Apple, Samsung, Sony, dan Android).
-2. **Melatih dan menguji model AI secara otomatis** untuk membedakan mana cuitan yang berisi **Apresiasi/Positif** dan mana yang berisi **Keluhan/Negatif**.
-3. **Menyediakan layanan API siap pakai** (menggunakan Docker) sekaligus **layar pemantau kesehatan sistem 24 jam** (menggunakan Prometheus & Grafana).
+Proyek ini menerapkan alur **MLOps (Machine Learning Operations)** menggunakan **TensorFlow Extended (TFX)** untuk mengotomatisasi proses pelatihan, validasi, deployment, hingga monitoring model analisis sentimen.
 
 ---
 
-## Masalah Bisnis yang Diselesaikan
+## Masalah & Tujuan
 
-Perusahaan teknologi menerima ribuan komentar dan keluhan pelanggan setiap hari di media sosial (Twitter/X), mulai dari masalah baterai boros, *error* setelah *update software*, hingga layar rusak.
+### Masalah
+- Perusahaan teknologi menerima ribuan tweet dari pelanggan setiap hari, mulai dari komentar positif hingga keluhan produk (seperti baterai boros, error setelah update, atau layar rusak). Memisahkan keluhan pelanggan secara manual memakan banyak waktu.
+- Dari sisi teknis, model machine learning yang hanya dijalankan secara manual di notebook sulit dipakai langsung di server produksi karena proses validasi data, pelatihan ulang, dan pengecekan kualitas model belum otomatis.
 
-1. **Sulit Memilah Komplain Secara Manual:** Tim *Customer Support* kewalahan jika harus membaca ribuan cuitan satu per satu untuk mencari pelanggan yang sedang mengalami masalah serius.
-2. **Respons Lambat Merugikan Reputasi Brand:** Jika keluhan massal (misalnya *bug* aplikasi) terlambat disadari, pelanggan bisa berpindah ke produk pesaing.
-3. **Model AI Sering Rusak Saat Dipakai di Dunia Nyata:** Banyak model AI yang akurat saat uji coba, tetapi gagal bekerja saat dipasang di server perusahaan karena tidak ada sistem pengecekan kualitas dan pemantauan otomatis.
-
-## Tujuan Proyek
-
-1. **Deteksi Otomatis Keluhan Pelanggan:** Membangun model AI (**Bidirectional LSTM**) yang mampu mengenali cuitan positif maupun keluhan pelanggan dengan **akurasi 97,16%**.
-2. **Otomatisasi Proses Pelatihan AI (TFX Pipeline):** Membuat alur kerja otomatis mulai dari pemeriksaan data, pembersihan teks, pencarian pengaturan AI terbaik, hingga pengujian kualitas model.
-3. **Seleksi Kualitas Otomatis (Quality Gate):** Memastikan hanya model AI yang lolos standar akurasi yang boleh naik ke server produksi.
-4. **Siap Diakses & Dipantau Real-Time:** Membungkus model AI ke dalam container **Docker** agar mudah dipasang di server mana saja, lengkap dengan pemantauan kinerja lewat **Prometheus** dan **Grafana**.
+### Tujuan
+- Membuat model klasifikasi sentimen (**Bidirectional LSTM**) untuk membedakan tweet positif dan tweet keluhan pelanggan.
+- Mengotomatisasi seluruh tahapan pipeline menggunakan **TFX**, mulai dari pembacaan data, validasi skema, preprocessing teks, tuning parameter, hingga evaluasi model.
+- Menjalankan model yang sudah lolos evaluasi sebagai REST API menggunakan **TensorFlow Serving (Docker)**.
+- Memantau kondisi server model secara berkala menggunakan **Prometheus** dan **Grafana**.
 
 ---
 
-## Gambaran Data yang Digunakan
+## Dataset
 
-Dataset diambil dari [Sentiment Analysis Dataset](https://www.kaggle.com/datasets/dineshpiyasamara/sentiment-analysis-dataset) (`data/sentiment_analysis.csv`) yang berisi **7.920 cuitan pelanggan** produk elektronik dan *smartphone*:
-
-| Label | Kategori | Jumlah Data | Contoh Isi Cuitan Pelanggan |
-| :---: | :--- | :---: | :--- |
-| **`0`** | **Sentimen Positif** | `5.894` | Pelanggan senang dengan fitur kamera, desain, atau pembelian baru |
-| **`1`** | **Sentimen Negatif / Keluhan** | `2.026` | Komplain baterai cepat habis, *crash* usai *update*, atau layanan pelanggan buruk |
-| **Total** | | **7.920** | Dibagi menjadi **80% Data Latih** dan **20% Data Uji** |
+Dataset yang digunakan adalah [Sentiment Analysis Dataset](https://www.kaggle.com/datasets/dineshpiyasamara/sentiment-analysis-dataset) (`data/sentiment_analysis.csv`) yang berisi **7.920 tweet** pelanggan terkait produk teknologi (Apple, Sony, Samsung, Android):
+- **Label 0 (Positif):** 5.894 data
+- **Label 1 (Negatif / Keluhan):** 2.026 data
+- Data dibagi menjadi **80% data latih** dan **20% data evaluasi**.
 
 ---
 
-## Alur Kerja Otomatis (Pipeline MLOps)
+## Alur Pipeline TFX
 
-```mermaid
-flowchart LR
-    A[1. Data CSV
-7.920 Cuitan] --> B[2. Cek Kualitas
-& Bersihkan Data]
-    B --> C[3. Cari Pengaturan
-& Latih Model AI]
-    C --> D[4. Uji Kelayakan
-Model Baru]
-    D -->|Lolos Uji| E[5. Pasang ke Server
-Docker API]
-    E --> F[6. Pantau 24 Jam
-Prometheus & Grafana]
-```
+Pipeline diatur pada file `pipeline.py` dan `modules/components.py` dengan urutan berikut:
 
-Penjelasan sederhana tiap komponen otomatis di dalam sistem (**TensorFlow Extended / TFX**):
-
-| Tahap | Nama Komponen | Tugasnya dalam Bahasa Sederhana |
-| :--- | :--- | :--- |
-| **1. Baca Data** | `CsvExampleGen` | Membaca file CSV dan membagi data menjadi 80% untuk belajar dan 20% untuk ujian. |
-| **2. Cek Data** | `StatisticsGen`, `SchemaGen`, `ExampleValidator` | Memeriksa apakah ada data yang rusak, kosong, atau salah format sebelum dipelajari AI. |
-| **3. Rapikan Teks** | `Transform` | Merapikan huruf besar/kecil pada teks cuitan secara konsisten. |
-| **4. Cari Setelan Terbaik** | `Tuner` | Mencoba beberapa kombinasi pengaturan (*hyperparameter*) agar AI mencapai akurasi tertinggi. |
-| **5. Latih AI** | `Trainer` | Melatih jaringan saraf **Bidirectional LSTM** menggunakan setelan terbaik. |
-| **6. Uji Kelayakan** | `Resolver` & `Evaluator` | Menguji model AI baru. Jika akurasinya di bawah standar atau kalah dari model lama, model ditolak. |
-| **7. Rilis Model** | `Pusher` | Jika lolos ujian, model otomatis dikirim ke folder produksi untuk dijalankan oleh server. |
+1. **CsvExampleGen**: Membaca file CSV dan membagi data menjadi data latih (80%) dan evaluasi (20%).
+2. **StatisticsGen & SchemaGen**: Menghitung statistik data dan membuat skema tipe data otomatis.
+3. **ExampleValidator**: Mengecek apakah ada data kosong atau format data yang menyimpang dari skema.
+4. **Transform (`modules/transform.py`)**: Mengubah teks tweet menjadi huruf kecil (*lowercase*) menggunakan `tensorflow_transform`.
+5. **Tuner (`modules/tuner.py`)**: Mencari kombinasi hyperparameter terbaik menggunakan `RandomSearch`.
+6. **Trainer (`modules/trainer.py`)**: Melatih model **Bidirectional LSTM** dan menyimpan model ke format `SavedModel`.
+7. **Evaluator**: Menguji performa model menggunakan **TFMA**. Model hanya diloloskan jika akurasinya melewati batas minimum dan lebih baik dari model sebelumnya.
+8. **Pusher**: Menyimpan model yang sudah lolos evaluasi ke folder `serving_model_dir/`.
 
 ---
 
-## Performa Model AI
+## Hasil Evaluasi Model
 
-Model dibangun menggunakan arsitektur **Bidirectional LSTM** (membaca konteks kalimat dari depan ke belakang dan sebaliknya) dengan hasil pengujian sebagai berikut:
-
-| Ukuran Performa | Hasil | Arti Sederhana |
-| :--- | :--- | :--- |
-| **Binary Accuracy** | **97,16%** | Dari 100 cuitan, model berhasil menebak sekitar 97 cuitan dengan tepat. |
-| **Loss (Tingkat Kesalahan)** | `0,0897` | Semakin mendekati 0 berarti tingkat kesalahan prediksi semakin kecil. |
-| **Skor AUC** | `0,7300` (`73%`) | Kemampuan model dalam membedakan kelas positif dan keluhan. |
+Model **Bidirectional LSTM** yang dihasilkan memiliki performa sebagai berikut pada tahap evaluasi:
+- **Binary Accuracy:** 97,16% (`0.9716`)
+- **Loss:** `0.0897`
+- **AUC:** `0.7300` (73%)
 
 ---
 
-## Isi Folder Proyek
+## Struktur Folder
 
 ```text
 proyek MLops/
 ├── config/
-│   └── prometheus.config          # Pengaturan agar server AI bisa mengirim data ke alat pemantau
+│   └── prometheus.config          # Konfigurasi metrik Prometheus untuk TF Serving
 ├── data/
-│   └── sentiment_analysis.csv     # Data 7.920 cuitan pelanggan produk teknologi
+│   └── sentiment_analysis.csv     # Dataset tweet sentimen (7.920 baris)
 ├── modules/
-│   ├── components.py              # Pengaturan urutan kerja pipeline otomatis (TFX)
-│   ├── transform.py               # Kode untuk merapikan teks cuitan
-│   ├── tuner.py                   # Kode untuk mencari pengaturan model AI terbaik
-│   └── trainer.py                 # Kode arsitektur model AI (Bi-LSTM) dan proses pelatihannya
+│   ├── components.py              # Susunan komponen pipeline TFX
+│   ├── transform.py               # Kode preprocessing teks
+│   ├── tuner.py                   # Kode tuning hyperparameter
+│   └── trainer.py                 # Kode arsitektur model Bi-LSTM & training
 ├── monitoring/
-│   ├── Dockerfile                 # Pembungkus server pemantau Prometheus
-│   └── prometheus.yml             # Pengaturan jadwal pengecekan server setiap 5 detik
-├── serving_model_dir/             # Tempat penyimpanan model AI yang sudah lolos uji kelayakan
-├── Dockerfile                     # Pembungkus model AI menjadi layanan server (TensorFlow Serving)
-├── pipeline.py                    # Penggerak utama pipeline otomatis
-├── notebook.ipynb                 # File untuk menjalankan seluruh proses otomatis dari awal sampai akhir
-├── check_tf_serving.ipynb         # File untuk mengecek apakah server AI sudah menyala
-└── test_notebook.ipynb            # File untuk mencoba mengirim teks cuitan ke server AI
+│   ├── Dockerfile                 # Dockerfile untuk Prometheus
+│   └── prometheus.yml             # Konfigurasi scraping metrik TF Serving
+├── serving_model_dir/             # Folder hasil model yang siap di-deploy
+├── Dockerfile                     # Dockerfile untuk TensorFlow Serving
+├── pipeline.py                    # Konfigurasi utama jalannya pipeline TFX
+├── notebook.ipynb                 # Notebook untuk menjalankan pipeline TFX
+├── check_tf_serving.ipynb         # Notebook untuk cek status server model
+└── test_notebook.ipynb            # Notebook untuk tes kirim request prediksi ke API
 ```
 
 ---
 
-## Cara Menjalankan Proyek
+## Cara Menjalankan
 
-### 1. Menjalankan Pipeline Pelatihan Otomatis
-Buka dan jalankan seluruh sel di dalam `notebook.ipynb`. Sistem akan otomatis membaca data, melatih AI, menguji akurasinya, dan menyimpan model terbaik.
+### 1. Menjalankan Pipeline TFX
+Buka dan jalankan semua sel pada `notebook.ipynb` untuk memproses data hingga menghasilkan model di folder `serving_model_dir/`.
 
-### 2. Menyalakan Server AI dengan Docker
-Jalankan perintah ini di terminal untuk menyalakan server prediksi AI:
+### 2. Menjalankan Model dengan Docker (TensorFlow Serving)
 ```bash
 docker build -t sentiment-tf-serving .
 docker run -d -p 8500:8500 -p 8501:8501 --name tf-serving sentiment-tf-serving
 ```
 
-Cek apakah server sudah aktif:
+Cek apakah model sudah aktif:
 ```bash
 curl http://localhost:8501/v1/models/cc-model
 ```
 
-### 3. Mencoba Mengirim Cuitan ke Server AI
-Lihat file `test_notebook.ipynb` atau gunakan kode Python berikut untuk mengetes prediksi:
-```python
-import base64
-import json
-import requests
-import tensorflow as tf
+### 3. Menguji Prediksi API
+Jalankan `test_notebook.ipynb` untuk mengirim contoh teks tweet ke endpoint `http://localhost:8501/v1/models/cc-model:predict`.
 
-def siapkan_data(teks_tweet: str) -> str:
-    fitur = {"tweet": tf.train.Feature(bytes_list=tf.train.BytesList(value=[teks_tweet.encode()]))}
-    contoh = tf.train.Example(features=tf.train.Features(feature=fitur))
-    return json.dumps({
-        "signature_name": "serving_default",
-        "instances": [{"b64": base64.b64encode(contoh.SerializeToString()).decode()}]
-    })
-
-# Kirim teks cuitan ke server AI
-respons = requests.post(
-    "http://localhost:8501/v1/models/cc-model:predict",
-    data=siapkan_data("The battery drains so fast after the update!")
-)
-skor = respons.json()["predictions"][0][0]
-hasil = "Negatif / Keluhan" if skor > 0.6 else "Positif"
-print(f"Hasil Deteksi: {hasil} (Skor: {skor:.4f})")
-```
-
-### 4. Menyalakan Sistem Pemantau (Prometheus)
+### 4. Menjalankan Monitoring Prometheus
 ```bash
 cd monitoring
 docker build -t tf-serving-prometheus .
 docker run -d -p 9090:9090 --name prometheus tf-serving-prometheus
 ```
-
----
-
-## Penulis
-
-**Azhar Zuhro**
-- GitHub: [@azharzuhro12](https://github.com/azharzuhro12)
-- LinkedIn: [Azhar Zuhro](https://www.linkedin.com/in/azhar-zuhro-927525225/)
