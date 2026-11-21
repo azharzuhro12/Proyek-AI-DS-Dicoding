@@ -1,4 +1,4 @@
-# End-to-End MLOps Pipeline: Analisis Sentimen dengan TFX, Docker, Prometheus & Grafana
+# End-to-End MLOps Pipeline: Analisis Sentimen Pelanggan Produk Teknologi
 
 ![Python](https://img.shields.io/badge/Python-3.8-3776AB?logo=python&logoColor=white)
 ![TFX](https://img.shields.io/badge/TFX-TensorFlow_Extended-FF6F00?logo=tensorflow&logoColor=white)
@@ -6,29 +6,39 @@
 ![Prometheus](https://img.shields.io/badge/Prometheus-Monitoring-E6522C?logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-Observability-F46800?logo=grafana&logoColor=white)
 
-Implementasi pipeline **Machine Learning Operations (MLOps)** end-to-end untuk klasifikasi sentimen teks menggunakan **TensorFlow Extended (TFX)**, **Apache Beam**, **TensorFlow Serving**, **Docker**, **Prometheus**, dan **Grafana**.
+Implementasi pipeline **Machine Learning Operations (MLOps)** end-to-end untuk mendeteksi sentimen dan keluhan pelanggan terhadap produk teknologi (Apple, Sony, Samsung, Android) di media sosial menggunakan **TensorFlow Extended (TFX)**, **Apache Beam**, **TensorFlow Serving**, **Docker**, **Prometheus**, dan **Grafana**.
 
 ---
 
-## Latar Belakang Masalah
+## Latar Belakang & Masalah Bisnis
 
-Model analisis sentimen yang dikembangkan secara manual di lingkungan eksperimen (*notebook*) sering kali menghadapi kendala ketika harus dijalankan di lingkungan produksi, antara lain:
-1. **Inkonsistensi Data & Skema:** Perubahan format data, nilai kosong (*missing values*), atau anomali pada data baru dapat menurunkan akurasi model tanpa terdeteksi.
-2. **Training-Serving Skew:** Perbedaan cara *preprocessing* teks saat pelatihan dan saat model menerima input di API produksi sering memicu kesalahan prediksi.
-3. **Proses Validasi & Deployment Manual:** Membandingkan performa model baru terhadap model lama serta memperbarui layanan inferensi secara manual memakan waktu dan rawan kesalahan.
-4. **Minimnya Observabilitas Produksi:** Tanpa pemantauan metrik secara *real-time*, sulit untuk mengetahui beban *request*, latensi inferensi, maupun status kesehatan layanan model.
+Perusahaan teknologi dan elektronik konsumen menerima ribuan opini, ulasan, serta keluhan pelanggan setiap hari melalui media sosial (Twitter/X), mulai dari kendala *software update*, daya tahan baterai, kerusakan layar, hingga ketidakpuasan terhadap layanan pelanggan (*customer support*).
+
+Masalah bisnis utama yang dihadapi perusahaan adalah:
+1. **Volume Opini Pelanggan yang Masif & Tidak Terstruktur:** Memilah ribuan cuitan pelanggan secara manual untuk membedakan antara ulasan positif dan komplain produk membutuhkan waktu lama serta biaya operasional yang tinggi.
+2. **Keterlambatan Respons terhadap Krisis Produk:** Keluhan kritis pelanggan (seperti *bug* pembaruan sistem atau cacat perangkat keras) yang tidak segera terdeteksi dapat menurunkan reputasi *brand* dan meningkatkan risiko *customer churn*.
+3. **Kebutuhan Sistem Prediksi yang Andal di Produksi:** Tim produk dan *customer support* membutuhkan layanan klasifikasi sentimen otomatis yang selalu terbarui, bebas dari *training-serving skew*, serta terpantau kinerjanya secara *real-time* saat memproses data langsung di produksi.
 
 ## Tujuan Proyek
 
-Proyek ini bertujuan untuk membangun sistem MLOps yang terotomatisasi dan siap produksi dengan sasaran berikut:
-1. **Otomatisasi Siklus Hidup ML:** Mengintegrasikan tahapan *data ingestion*, validasi data, *feature engineering*, *hyperparameter tuning*, pelatihan model **Bidirectional LSTM**, hingga evaluasi ke dalam satu pipeline TFX yang terukur.
-2. **Mencegah Training-Serving Skew:** Menyematkan grafik transformasi teks (`tensorflow_transform`) langsung ke dalam artefak `SavedModel` sehingga *preprocessing* berjalan identik di tahap pelatihan dan produksi.
-3. **Quality Gate Otomatis (Model Blessing):** Memastikan hanya model yang memenuhi ambang batas evaluasi (**TensorFlow Model Analysis / TFMA**) dan mengungguli *baseline model* yang dapat didorong (*push*) ke produksi.
-4. **Deployment & Monitoring Terkontainerisasi:** Menyajikan model melalui REST API menggunakan **TensorFlow Serving (Docker)** yang terhubung dengan **Prometheus** dan **Grafana** untuk pemantauan performa secara *real-time*.
+Proyek ini dibangun untuk menjawab permasalahan bisnis tersebut dengan sasaran sebagai berikut:
+1. **Deteksi Otomatis Sentimen & Keluhan Pelanggan:** Membangun model Deep Learning (**Bidirectional LSTM**) yang mampu mengklasifikasikan cuitan pelanggan ke dalam sentimen positif maupun negatif/komplain secara akurat (**Binary Accuracy 97.16%** pada **7.920** data cuitan).
+2. **Percepatan Eskalasi Tim Produk & Support:** Menyediakan endpoint REST API siap pakai agar sistem bisnis dapat langsung memfilter keluhan pelanggan secara *real-time* dan memprioritaskan penanganan masalah produk.
+3. **Otomatisasi & Standarisasi Pipeline ML (TFX):** Mengotomatisasi seluruh tahapan mulai dari validasi data, *preprocessing* teks (`tensorflow_transform`), pencarian *hyperparameter* terbaik (`KerasTuner`), hingga evaluasi kelayakan model (**TFMA**) sebelum diteruskan ke produksi.
+4. **Observabilitas Layanan Produksi:** Memantau ketersediaan layanan inferensi **TensorFlow Serving** secara berkelanjutan menggunakan **Prometheus** dan **Grafana**.
 
 ---
 
-## Arsitektur Pipeline
+## Informasi Dataset
+
+Dataset yang digunakan adalah [Sentiment Analysis Dataset](https://www.kaggle.com/datasets/dineshpiyasamara/sentiment-analysis-dataset) (`data/sentiment_analysis.csv`) yang berisi **7.920 cuitan pelanggan** terkait produk teknologi dan *smartphone*:
+- **Fitur Input (`tweet`):** Teks opini atau ulasan pelanggan di media sosial.
+- **Target (`label`):** Klasifikasi sentimen biner (`0` = Sentimen Positif / Apresiasi Produk, **5.894** sampel; `1` = Sentimen Negatif / Keluhan Produk, **2.026** sampel).
+- **Pembagian Data:** 80% data latih (*train*) dan 20% data evaluasi (*eval*) menggunakan `CsvExampleGen` (*hash buckets* 8:2).
+
+---
+
+## Arsitektur Pipeline MLOps
 
 ```mermaid
 flowchart LR
@@ -51,7 +61,7 @@ flowchart LR
 
 | Tahap | Komponen TFX | Fungsi Utama |
 | :--- | :--- | :--- |
-| **1. Ingestion** | `CsvExampleGen` | Membaca dataset `data/sentiment_analysis.csv` dan membaginya menjadi 80% data latih (*train*) serta 20% data evaluasi (*eval*) menggunakan *hash buckets* (8:2). |
+| **1. Ingestion** | `CsvExampleGen` | Membaca dataset `data/sentiment_analysis.csv` dan membaginya menjadi 80% data latih (*train*) serta 20% data evaluasi (*eval*). |
 | **2. Statistics** | `StatisticsGen` | Menghitung statistik deskriptif untuk seluruh fitur pada dataset. |
 | **3. Schema** | `SchemaGen` | Menyusun skema tipe data dan batasan domain fitur (`tweet`, `label`) secara otomatis. |
 | **4. Validation** | `ExampleValidator` | Mendeteksi anomali data, nilai kosong, dan penyimpangan distribusi terhadap skema sebelum pelatihan dimulai. |
@@ -89,7 +99,7 @@ proyek MLops/
 ├── config/
 │   └── prometheus.config          # Konfigurasi endpoint metrik Prometheus pada TF Serving
 ├── data/
-│   └── sentiment_analysis.csv     # Dataset sumber (teks tweet & label sentimen biner)
+│   └── sentiment_analysis.csv     # Dataset sumber (7.920 cuitan pelanggan & label sentimen)
 ├── modules/
 │   ├── components.py              # Definisi komponen TFX dan konfigurasi evaluasi TFMA
 │   ├── transform.py               # Fungsi preprocessing teks dengan TensorFlow Transform
@@ -171,10 +181,10 @@ def prepare_example(tweet: str) -> str:
 
 response = requests.post(
     "http://localhost:8501/v1/models/cc-model:predict",
-    data=prepare_example("The service and product quality were outstanding!")
+    data=prepare_example("The battery drains so fast after the update!")
 )
 score = response.json()["predictions"][0][0]
-sentiment = "Positif" if score > 0.6 else "Negatif"
+sentiment = "Negatif / Keluhan" if score > 0.6 else "Positif"
 print(f"Sentimen: {sentiment} (Skor: {score:.4f})")
 ```
 
