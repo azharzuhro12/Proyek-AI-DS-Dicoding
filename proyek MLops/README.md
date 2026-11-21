@@ -1,12 +1,18 @@
-# End-to-End MLOps Pipeline: Sentiment Analysis with TFX, Docker, Prometheus & Grafana
+# End-to-End MLOps Pipeline for Sentiment Analysis
 
-Proyek ini mengimplementasikan pipeline **Machine Learning Operations (MLOps)** end-to-end untuk klasifikasi sentimen teks (Tweet Sentiment Analysis) menggunakan **TensorFlow Extended (TFX)**, **Apache Beam**, **TensorFlow Serving**, **Docker**, **Prometheus**, dan **Grafana**.
+![Python](https://img.shields.io/badge/Python-3.8-3776AB?logo=python&logoColor=white)
+![TFX](https://img.shields.io/badge/TFX-TensorFlow_Extended-FF6F00?logo=tensorflow&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-TF_Serving-2496ED?logo=docker&logoColor=white)
+![Prometheus](https://img.shields.io/badge/Prometheus-Monitoring-E6522C?logo=prometheus&logoColor=white)
+![Grafana](https://img.shields.io/badge/Grafana-Observability-F46800?logo=grafana&logoColor=white)
 
-Seluruh siklus hidup model diotomatisasi mulai dari *data ingestion*, validasi skema, *feature engineering*, *hyperparameter tuning*, pelatihan model (*Bi-LSTM*), evaluasi berbasis ambang batas (*model blessing* dengan TFMA), hingga *containerized serving* dan pemantauan metrik produksi secara *real-time*.
+An automated Machine Learning Operations (MLOps) pipeline for binary text sentiment classification built with **TensorFlow Extended (TFX)**, **Apache Beam**, **TensorFlow Serving**, **Docker**, **Prometheus**, and **Grafana**.
+
+This project automates the complete machine learning lifecycle: data ingestion, schema validation, preprocessing with TensorFlow Transform, hyperparameter tuning, Bidirectional LSTM training, threshold-based model validation with TFMA, containerized serving, and real-time production monitoring.
 
 ---
 
-## Arsitektur Pipeline MLOps
+## Pipeline Architecture
 
 ```mermaid
 flowchart LR
@@ -17,95 +23,95 @@ flowchart LR
     D --> E
     B --> F[Transform]
     D --> F
-    F --> G[Tuner - RandomSearch]
-    F --> H[Trainer - Bi-LSTM]
+    F --> G[Tuner]
+    F --> H[Trainer]
     G --> H
-    H --> I[Evaluator - TFMA]
-    J[Resolver - LatestBlessedModel] --> I
+    H --> I[Evaluator]
+    J[Resolver] --> I
     I -->|Blessed| K[Pusher]
-    K --> L[TF Serving Docker]
+    K --> L[TF Serving]
     L --> M[Prometheus & Grafana]
 ```
 
-### Komponen TFX yang Digunakan
-1. **CsvExampleGen**: Membaca dataset `data/sentiment_analysis.csv` dan membaginya secara otomatis menjadi *train split* (80%) dan *eval split* (20%) menggunakan *hash buckets* (8:2).
-2. **StatisticsGen**: Menghitung statistik deskriptif dari setiap fitur pada dataset.
-3. **SchemaGen**: Menyusun skema tipe data dan batasan nilai fitur secara otomatis berdasarkan hasil statistik.
-4. **ExampleValidator**: Mendeteksi anomali data, nilai kosong (*missing values*), dan penyimpangan distribusi terhadap skema.
-5. **Transform (`modules/transform.py`)**: Melakukan *preprocessing* teks (`tf.strings.lower`) pada fitur `tweet` dan konversi tipe label (`tf.int64`) menggunakan `tensorflow_transform` (TFT). Grafik transformasi disimpan bersama model untuk mencegah *training-serving skew*.
-6. **Tuner (`modules/tuner.py`)**: Mencari kombinasi *hyperparameter* terbaik menggunakan `keras_tuner.RandomSearch` (`max_trials=4`, objektif `binary_accuracy`).
-7. **Trainer (`modules/trainer.py`)**: Melatih jaringan saraf **Bidirectional LSTM** dengan parameter hasil *tuning* dan mengekspor model ke format `SavedModel` beserta *serving signature* untuk menerima payload `tf.train.Example`.
-8. **Resolver & Evaluator (`modules/components.py`)**: Membandingkan performa model baru dengan *baseline model* menggunakan **TensorFlow Model Analysis (TFMA)**. Model hanya diloloskan (*blessed*) apabila memenuhi ambang batas `BinaryAccuracy >= 0.5` dan lebih unggul dari model sebelumnya.
-9. **Pusher**: Mendistribusikan model yang telah lolos evaluasi ke direktori `serving_model_dir/azharzuhro-detection-model`.
+| Stage | Component | Responsibility |
+| :--- | :--- | :--- |
+| **1. Ingestion** | `CsvExampleGen` | Ingests `data/sentiment_analysis.csv` and partitions data into 80% train and 20% evaluation splits using hash buckets (8:2). |
+| **2. Statistics** | `StatisticsGen` | Computes descriptive statistics across all dataset records. |
+| **3. Schema** | `SchemaGen` | Infers feature types, domains, and presence constraints (`tweet`, `label`). |
+| **4. Validation** | `ExampleValidator` | Detects data anomalies, missing values, and schema drift before training. |
+| **5. Preprocessing** | `Transform` | Normalizes raw text (`tf.strings.lower`) and casts label types (`tf.int64`) via `tensorflow_transform` (`tft`), exporting a preprocessing graph attached to the model to prevent training-serving skew. |
+| **6. Tuning** | `Tuner` | Runs `keras_tuner.RandomSearch` (`max_trials=4`) to optimize embedding dimensions, LSTM units, hidden layers, dropout rate, and learning rate. |
+| **7. Training** | `Trainer` | Trains a **Bidirectional LSTM** network using the best hyperparameters and exports a `SavedModel` with a serialized `tf.train.Example` serving signature. |
+| **8. Evaluation** | `Resolver` + `Evaluator` | Compares the candidate model against the latest blessed baseline using **TensorFlow Model Analysis (TFMA)**. Models must exceed `BinaryAccuracy >= 0.5` and outperform the active baseline. |
+| **9. Deployment** | `Pusher` | Pushes blessed models to `serving_model_dir/azharzuhro-detection-model` for production serving. |
 
 ---
 
-## Arsitektur Model & Hyperparameter Tuning
+## Model Specification & Performance
 
-Model klasifikasi biner dibangun menggunakan TensorFlow/Keras dengan susunan layer sebagai berikut:
-- **Input Layer**: Menerima string mentah (`tweet_xf`) berdimensi `(1,)`.
-- **TextVectorization**: Tokenisasi teks dengan `max_tokens=5000` dan `output_sequence_length=500`.
-- **Embedding Layer**: Merepresentasikan token ke dalam vektor padat (`embed_dims`: `16` - `128`, step `32`).
-- **Bidirectional LSTM**: Menangkap konteks urutan kata dua arah (`lstm_units`: `32` - `128`, step `32`).
-- **Hidden Dense + Dropout Layers**: `1` atau `2` layer Dense (`32` - `256` unit, aktivasi ReLU) diikuti Dropout (`0.1` - `0.5`).
-- **Output Layer**: `Dense(1, activation='sigmoid')` dengan *optimizer* Adam (`learning_rate`: `1e-2`, `1e-3`, `1e-4`) dan *loss function* `BinaryCrossentropy`.
+### Neural Architecture
+- **Input**: Raw string feature (`tweet_xf`, shape `(1,)`).
+- **TextVectorization**: Vocabulary size `5,000`, sequence length `500`.
+- **Embedding**: Tuned between `16` and `128` dimensions (step `32`).
+- **Bidirectional LSTM**: Tuned between `32` and `128` units (step `32`).
+- **Classification Head**: `1` to `2` Dense layers (`32` to `256` units, ReLU) with Dropout (`0.1` to `0.5`), followed by `Dense(1, activation="sigmoid")`.
+- **Optimization**: Adam optimizer (`1e-2`, `1e-3`, `1e-4`) with `BinaryCrossentropy` loss and `EarlyStopping` (`patience=10`).
 
-### Hasil Evaluasi Model
-| Metrik | Nilai |
+### Evaluation Results (TFMA)
+| Metric | Value |
 | :--- | :--- |
 | **Binary Accuracy** | **97.16%** (`0.9716`) |
-| **Binary Crossentropy Loss** | `0.0897` |
-| **AUC** | `0.73` (`73%`) |
+| **Loss (Binary Crossentropy)** | `0.0897` |
+| **AUC** | `0.7300` |
 
 ---
 
-## Struktur Direktori
+## Repository Structure
 
 ```text
 proyek MLops/
 ├── config/
-│   └── prometheus.config          # Konfigurasi endpoint metrik Prometheus untuk TF Serving
+│   └── prometheus.config          # Prometheus metrics endpoint config for TF Serving
 ├── data/
-│   └── sentiment_analysis.csv     # Dataset utama analisis sentimen
+│   └── sentiment_analysis.csv     # Source dataset (tweet & binary sentiment label)
 ├── modules/
-│   ├── components.py              # Definisi dan koneksi komponen pipeline TFX
-│   ├── transform.py               # Preprocessing fitur dengan TensorFlow Transform
-│   ├── tuner.py                   # Hyperparameter tuning dengan KerasTuner RandomSearch
-│   └── trainer.py                 # Arsitektur Bi-LSTM, training loop, dan ekspor SavedModel
+│   ├── components.py              # TFX component definitions and DAG wiring
+│   ├── transform.py               # TensorFlow Transform preprocessing function
+│   ├── tuner.py                   # KerasTuner RandomSearch hyperparameter tuning
+│   └── trainer.py                 # Bi-LSTM architecture, training loop, and serving signature
 ├── monitoring/
-│   ├── Dockerfile                 # Image Docker untuk server Prometheus
-│   └── prometheus.yml             # Konfigurasi scrape interval (5s) ke endpoint TF Serving
-├── serving_model_dir/             # Direktori output model yang telah lolos evaluasi (Pusher)
-├── Dockerfile                     # Image Docker TensorFlow Serving dengan Prometheus monitoring
-├── pipeline.py                    # Inisialisasi TFX Pipeline Orchestrator & Apache Beam args
-├── notebook.ipynb                 # Eksekusi end-to-end pipeline TFX dengan BeamDagRunner
-├── check_tf_serving.ipynb         # Pemeriksaan status kesehatan model pada endpoint TF Serving
-├── test_notebook.ipynb            # Pengujian request prediksi dengan serialized tf.train.Example
-└── laporan proyek.md              # Ringkasan laporan teknis submission
+│   ├── Dockerfile                 # Prometheus server container definition
+│   └── prometheus.yml             # Scrape config targeting TF Serving metrics endpoint
+├── serving_model_dir/             # Blessed SavedModel artifacts exported by Pusher
+├── Dockerfile                     # TensorFlow Serving container with Prometheus config
+├── pipeline.py                    # TFX Pipeline orchestrator with Apache Beam & SQLite metadata
+├── notebook.ipynb                 # End-to-end pipeline execution via BeamDagRunner
+├── check_tf_serving.ipynb         # Model availability check against TF Serving REST API
+└── test_notebook.ipynb            # Client script for serialized tf.train.Example inference
 ```
 
 ---
 
-## Cara Menjalankan Proyek
+## Getting Started
 
-### 1. Menjalankan Pipeline TFX
-Jalankan seluruh sel pada `notebook.ipynb` untuk mengeksekusi pipeline menggunakan `BeamDagRunner`:
+### 1. Run the TFX Pipeline
+Execute `notebook.ipynb` or run the orchestrator directly via Apache Beam:
 
 ```python
 from tfx.orchestration.beam.beam_dag_runner import BeamDagRunner
 from modules import components
 import pipeline
 
-main_components = components.init_components({
+components_list = components.init_components({
     "data_root": "data",
     "transform_module_file_path": "modules/transform.py",
     "trainer_module_file_path": "modules/trainer.py",
     "tuner_module_file_path": "modules/tuner.py",
-    "serving_directory": "serving_model_dir/azharzuhro-detection-model"
+    "serving_directory": "serving_model_dir/azharzuhro-detection-model",
 })
 
 tfx_pipeline = pipeline.init_pipeline_orchestrator(
-    main_components,
+    components=components_list,
     pipeline_root="azharzuhro-pipelines/azharzuhro-detection-pipeline",
     pipeline_name="azharzuhro-detection-pipeline",
     metadata_path="azharzuhro-pipelines/azharzuhro-detection-pipeline/metadata.sqlite",
@@ -114,21 +120,21 @@ tfx_pipeline = pipeline.init_pipeline_orchestrator(
 BeamDagRunner().run(tfx_pipeline)
 ```
 
-### 2. Menjalankan Model Serving dengan Docker
-Bangun dan jalankan container **TensorFlow Serving** yang telah dilengkapi konfigurasi metrik Prometheus:
+### 2. Deploy Model with TensorFlow Serving (Docker)
+Build and start the serving container exposing gRPC (`8500`) and REST API (`8501`):
 
 ```bash
 docker build -t sentiment-tf-serving .
 docker run -d -p 8500:8500 -p 8501:8501 --name tf-serving sentiment-tf-serving
 ```
 
-Verifikasi status ketersediaan model:
+Check model status:
 ```bash
 curl http://localhost:8501/v1/models/cc-model
 ```
 
-### 3. Menguji Endpoint Prediksi (REST API)
-Kirim permintaan inferensi menggunakan payload `tf.train.Example` ter-serialisasi (lihat `test_notebook.ipynb`):
+### 3. Run Inference via REST API
+Send a base64-encoded serialized `tf.train.Example` payload to the `/v1/models/cc-model:predict` endpoint:
 
 ```python
 import base64
@@ -149,40 +155,26 @@ def prepare_example(tweet: str) -> str:
 
 response = requests.post(
     "http://localhost:8501/v1/models/cc-model:predict",
-    data=prepare_example("beautiful")
+    data=prepare_example("The service and product quality were outstanding!")
 )
-predictions = response.json().get("predictions")
-label = "positif" if predictions[0][0] > 0.6 else "negatif"
-print(f"Hasil prediksi: {label} (skor: {predictions[0][0]:.4f})")
+score = response.json()["predictions"][0][0]
+sentiment = "Positive" if score > 0.6 else "Negative"
+print(f"Sentiment: {sentiment} (Confidence: {score:.4f})")
 ```
 
-### 4. Menjalankan Monitoring (Prometheus & Grafana)
-Bangun dan jalankan container Prometheus pada folder `monitoring/`:
+### 4. Start Prometheus & Grafana Monitoring
+Build and run the Prometheus container to scrape `/monitoring/prometheus/metrics` from TensorFlow Serving:
 
 ```bash
 cd monitoring
 docker build -t tf-serving-prometheus .
 docker run -d -p 9090:9090 --name prometheus tf-serving-prometheus
 ```
-Hubungkan **Grafana** ke sumber data Prometheus (`http://localhost:9090`) untuk memantau metrik request, latensi, serta kesehatan layanan inferensi.
 
 ---
 
-## Dokumentasi Deployment & Monitoring
+## Author
 
-### Status Model Serving
-![Deployment Status](./azharzuhro-deployment.png)
-
-### Endpoint Metrik Monitoring
-![Monitoring Metrics](./azharzuhro-monitoring.png)
-
-### Prometheus Targets & Scraping
-![Prometheus Dashboard](./azharzuhro-prometehus.png)
-
-### Grafana Observability Dashboard
-![Grafana Dashboard](./azharzuhro-grafana.png)
-
----
-
-## Lisensi & Penulis
-Dikembangkan oleh **Azhar Zuhro** sebagai bagian dari pengembangan sistem **Machine Learning Operations (MLOps)**.
+**Azhar Zuhro**
+- GitHub: [@azharzuhro12](https://github.com/azharzuhro12)
+- LinkedIn: [Azhar Zuhro](https://www.linkedin.com/in/azhar-zuhro-927525225/)
