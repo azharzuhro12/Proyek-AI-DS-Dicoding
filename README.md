@@ -11,7 +11,7 @@ Analisis sentimen ulasan pengguna aplikasi **Shopee Indonesia** di Google Play S
 ### 🎬 Demo Aplikasi Streamlit
 Tersedia aplikasi web demo interaktif berbasis Streamlit:
 
-[![Demo Aplikasi Streamlit](Proyek%20Sentiment%20Analisis/demo_preview.png)](Proyek%20Sentiment%20Analisis/demo.mp4)
+![Demo Aplikasi Streamlit](Proyek%20Sentiment%20Analisis/demo.gif)
 
 > 🎥 **Video Demo:** [Tonton Video Demo (MP4)](Proyek%20Sentiment%20Analisis/demo.mp4) | [Format WebM](Proyek%20Sentiment%20Analisis/demo.webm)
 

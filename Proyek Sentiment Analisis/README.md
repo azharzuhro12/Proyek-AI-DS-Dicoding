@@ -8,9 +8,9 @@ Proyek ini berisi analisis sentimen terhadap ulasan pengguna aplikasi **Shopee I
 
 Tersedia aplikasi web interaktif berbasis **Streamlit** untuk mencoba prediksi sentimen secara langsung (live inference teks tunggal, eksplorasi data, dan analisis masal batch CSV):
 
-[![Demo Aplikasi Streamlit](demo_preview.png)](demo.mp4)
+![Demo Aplikasi Streamlit](demo.gif)
 
-> 🎥 **Video Demo Lengkap:** Klik gambar di atas atau buka file [demo.mp4](demo.mp4) *(format WebM: [demo.webm](demo.webm))*.
+> 🎥 **Video Resolusi Penuh:** [demo.mp4](demo.mp4) *(format WebM: [demo.webm](demo.webm))*.
 
 ---
 
@@ -84,6 +84,7 @@ Contoh hasil prediksi pada kalimat baru (`inference_Sentiment_Analysis.ipynb`):
 ```text
 Proyek Sentiment Analisis/
 ├── app.py                                                 # Aplikasi Demo Interaktif Streamlit
+├── demo.gif                                               # Animasi demo langsung memutar di GitHub
 ├── demo.mp4                                               # Video rekaman demo aplikasi (MP4)
 ├── demo.webm                                              # Video rekaman demo aplikasi (WebM)
 ├── demo_preview.png                                       # Thumbnail tangkapan layar demo
