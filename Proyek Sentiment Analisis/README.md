@@ -4,6 +4,16 @@ Proyek ini berisi analisis sentimen terhadap ulasan pengguna aplikasi **Shopee I
 
 ---
 
+## 🎬 Demo Aplikasi Interaktif (Streamlit)
+
+Tersedia aplikasi web interaktif berbasis **Streamlit** untuk mencoba prediksi sentimen secara langsung (live inference teks tunggal, eksplorasi data, dan analisis masal batch CSV):
+
+[![Demo Aplikasi Streamlit](demo_preview.png)](demo.mp4)
+
+> 🎥 **Video Demo Lengkap:** Klik gambar di atas atau buka file [demo.mp4](demo.mp4) *(format WebM: [demo.webm](demo.webm))*.
+
+---
+
 ## Masalah & Tujuan
 
 ### Masalah
@@ -73,6 +83,11 @@ Contoh hasil prediksi pada kalimat baru (`inference_Sentiment_Analysis.ipynb`):
 
 ```text
 Proyek Sentiment Analisis/
+├── app.py                                                 # Aplikasi Demo Interaktif Streamlit
+├── demo.mp4                                               # Video rekaman demo aplikasi (MP4)
+├── demo.webm                                              # Video rekaman demo aplikasi (WebM)
+├── demo_preview.png                                       # Thumbnail tangkapan layar demo
+├── slangwords.json                                        # Kamus normalisasi kata gaul/slang
 ├── data/
 │   └── ulasan_shoope.csv                                  # Data hasil scraping ulasan Shopee
 ├── model/
@@ -91,9 +106,12 @@ Proyek Sentiment Analisis/
 1. **Install library yang dibutuhkan**
    ```bash
    pip install -r requirements.txt
-   pip install google-play-scraper sastrawi nltk scikit-learn tensorflow wordcloud joblib
    ```
-2. **Menjalankan pelatihan / eksplorasi data**
+2. **Menjalankan demo aplikasi langsung di Streamlit**
+   ```bash
+   streamlit run app.py
+   ```
+3. **Menjalankan pelatihan / eksplorasi data**
    Buka dan jalankan `Azhar_Sentiment_Analysis_using_Machine_Learning.ipynb` di Jupyter Notebook atau Google Colab.
-3. **Mencoba prediksi kalimat baru**
+4. **Mencoba prediksi kalimat baru lewat Notebook**
    Buka `inference_Sentiment_Analysis.ipynb` untuk mengetes model yang sudah tersimpan di folder `model/`.
